@@ -115,77 +115,6 @@ next = function next(name) {
 
 // Tests are run in the order they are defined, so FLUSHDB should always be first.
 
-// THIS TEST SHOULD BE MOVED IN TO A PARSER
-// SPECIFIC TESTING FILE.
-tests.MULTI_7 = function () {
-    var name = "MULTI_7";
-
-    if (bclient.reply_parser.name != "javascript") {
-        console.log("Skipping wire-protocol test for 3rd-party parser");
-        return next(name);
-    }
-
-    var p = require("../lib/parser/javascript");
-    var parser = new p.Parser(false);
-    var reply_count = 0;
-    function check_reply(reply) {
-        assert.deepEqual(reply, [['a']], "Expecting multi-bulk reply of [['a']]");
-        reply_count++;
-        assert.notEqual(reply_count, 4, "Should only parse 3 replies");
-    }
-    parser.on("reply", check_reply);
-
-    parser.execute(new Buffer('*1\r\n*1\r\n$1\r\na\r\n'));
-
-    parser.execute(new Buffer('*1\r\n*1\r'));
-    parser.execute(new Buffer('\n$1\r\na\r\n'));
-
-    parser.execute(new Buffer('*1\r\n*1\r\n'));
-    parser.execute(new Buffer('$1\r\na\r\n'));
-
-    next(name);
-};
-
-tests.FWD_ERRORS_1 = function () {
-    var name = "FWD_ERRORS_1";
-
-    var toThrow = new Error("Forced exception");
-    var recordedError = null;
-
-    var originalHandlers = {
-        "error": client3.listeners("error"),
-        "message": client3.listeners("message")
-    };
-    client3.removeAllListeners("error");
-    client3.removeAllListeners("message");
-    client3.once("error", function (err) {
-        recordedError = err;
-    });
-
-    client3.on("message", function (channel, data) {
-        console.log("incoming");
-        if (channel == name) {
-            assert.equal(data, "Some message");
-            throw toThrow;
-        }
-    });
-    client3.subscribe(name);
-
-    client.publish(name, "Some message");
-    setTimeout(function () {
-        assert.equal(recordedError, toThrow, "Should have caught our forced exception");
-        client3.unsubscribe(name);
-        client3.removeAllListeners("message");
-        originalHandlers.error.forEach(function (fn) {
-            client3.on("error", fn);
-        });
-        originalHandlers.message.forEach(function (fn) {
-            client3.on("message", fn);
-        });
-        next(name);
-    }, 150);
-};
-
 tests.EVAL_1 = function () {
     var name = "EVAL_1";
 
@@ -194,29 +123,6 @@ tests.EVAL_1 = function () {
         return next(name);
     }
 
-    // test {EVAL - Lua integer -> Redis protocol type conversion}
-    client.eval("return 100.5", 0, require_number(100, name));
-    // test {EVAL - Lua string -> Redis protocol type conversion}
-    client.eval("return 'hello world'", 0, require_string("hello world", name));
-    // test {EVAL - Lua true boolean -> Redis protocol type conversion}
-    client.eval("return true", 0, require_number(1, name));
-    // test {EVAL - Lua false boolean -> Redis protocol type conversion}
-    client.eval("return false", 0, require_null(name));
-    // test {EVAL - Lua status code reply -> Redis protocol type conversion}
-    client.eval("return {ok='fine'}", 0, require_string("fine", name));
-    // test {EVAL - Lua error reply -> Redis protocol type conversion}
-    client.eval("return {err='this is an error'}", 0, require_error(name));
-    // test {EVAL - Lua table -> Redis protocol type conversion}
-    client.eval("return {1,2,3,'ciao',{1,2}}", 0, function (err, res) {
-        assert.strictEqual(5, res.length, name);
-        assert.strictEqual(1, res[0], name);
-        assert.strictEqual(2, res[1], name);
-        assert.strictEqual(3, res[2], name);
-        assert.strictEqual("ciao", res[3], name);
-        assert.strictEqual(2, res[4].length, name);
-        assert.strictEqual(1, res[4][0], name);
-        assert.strictEqual(2, res[4][1], name);
-    });
     // test {EVAL - Are the KEYS and ARGS arrays populated correctly?}
     client.eval("return {KEYS[1],KEYS[2],ARGV[1],ARGV[2]}", 2, "a", "b", "c", "d", function (err, res) {
         assert.strictEqual(4, res.length, name);
